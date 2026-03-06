@@ -12,7 +12,12 @@ function generateOrderNumber() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, phone, email, address, city, state, pincode, notes, items, subtotal, tax, total } = body;
+    const {
+      name, phone, email, address, city, state, pincode, notes,
+      items, subtotal, tax, total,
+      paymentMethod = 'COD',
+      razorpayPaymentId, razorpayOrderId, razorpaySignature,
+    } = body;
 
     if (!name || !phone || !address || !items?.length) {
       return NextResponse.json({ success: false, message: 'Missing required fields' }, { status: 400 });
@@ -62,21 +67,23 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const isPaid = paymentMethod === 'RAZORPAY' && !!razorpayPaymentId;
+
     // Create order
     const order = await prisma.order.create({
       data: {
-        orderNumber:      generateOrderNumber(),
-        userId:           user.id,
+        orderNumber:       generateOrderNumber(),
+        userId:            user.id,
         shippingAddressId: shippingAddress.id,
-        paymentMethod:    'COD',
-        paymentStatus:    'PENDING',
-        status:           'PENDING',
+        paymentMethod:     paymentMethod,
+        paymentStatus:     isPaid ? 'PAID' : 'PENDING',
+        status:            'PENDING',
         subtotal,
         tax,
-        shippingCharge:   0,
-        discount:         0,
+        shippingCharge:    0,
+        discount:          0,
         total,
-        customerNotes:    notes || null,
+        customerNotes:     notes || null,
         items: {
           create: items.map((item: {
             productId: string;
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
             quantity: number;
           }) => ({
             productId:   item.productId,
-            variantId:   item.variantId && item.variantId !== item.productId + '-default' ? item.variantId : null,
+            variantId:   null,   // variant IDs regenerate on product edit; label stored in variantName
             productName: item.productName,
             variantName: item.variantLabel || null,
             quantity:    item.quantity,
@@ -101,6 +108,20 @@ export async function POST(request: NextRequest) {
         },
       },
       include: { items: true },
+    });
+
+    // Create Payment record
+    await prisma.payment.create({
+      data: {
+        orderId:           order.id,
+        method:            paymentMethod,
+        amount:            total,
+        status:            isPaid ? 'PAID' : 'PENDING',
+        razorpayOrderId:   razorpayOrderId   || null,
+        razorpayPaymentId: razorpayPaymentId || null,
+        razorpaySignature: razorpaySignature || null,
+        paidAt:            isPaid ? new Date() : null,
+      },
     });
 
     return NextResponse.json({ success: true, data: { orderNumber: order.orderNumber, orderId: order.id } });

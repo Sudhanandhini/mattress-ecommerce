@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight, ChevronLeft, Star, ShieldCheck,
-  Gift, Phone, X, Heart, Share2, ChevronDown, ShoppingCart,
+  Gift, Phone, X, Heart, Share2, ChevronDown, ShoppingCart, Zap,
 } from 'lucide-react';
 import { productApi } from '@/lib/api/client';
-import { useCartStore, useWishlistStore } from '@/store/useStore';
+import { useCartStore, useWishlistStore, useBuyNowStore } from '@/store/useStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { AuthModal } from '@/components/auth/AuthModal';
 import toast from 'react-hot-toast';
@@ -230,10 +230,12 @@ function VariantModal({
 /* ── Page ────────────────────────────────────────────────────────────── */
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
+  const router   = useRouter();
 
   const addToCart    = useCartStore(s => s.addItem);
   const toggleWish   = useWishlistStore(s => s.toggle);
   const isWishlisted = useWishlistStore(s => s.has);
+  const setBuyNow    = useBuyNowStore(s => s.set);
   const isLoggedIn   = useAuthStore(s => s.isLoggedIn());
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -354,6 +356,21 @@ export default function ProductDetailPage() {
       quantity: 1,
     });
     toast.success('Added to cart!');
+  };
+
+  const handleOrderNow = () => {
+    if (!variant) return;
+    setBuyNow({
+      productId: product.id,
+      variantId: variant.id,
+      productName: product.name,
+      productSlug: product.slug,
+      imageUrl: images[0]?.url || '',
+      variantLabel: variantLabel,
+      price: sale,
+      quantity: 1,
+    });
+    router.push('/checkout?source=buynow');
   };
 
   const doToggleWishlist = () => {
@@ -584,21 +601,73 @@ export default function ProductDetailPage() {
                 <p className="text-xs text-gray-400 mt-0.5">(Incl. of all Taxes)</p>
               </div>
 
-              {/* Choose Size */}
+              {/* Size Variant Selector */}
               {product.variants.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-400 font-medium mb-1.5">
+                <div className="space-y-2.5">
+                  <p className="text-xs text-gray-400 font-medium">
                     {product.variants.length} Standard &amp; Custom options
                   </p>
-                  <button
-                    onClick={openModal}
-                    className="w-full flex items-center justify-between px-4 py-3 border-2 border-gray-200 rounded-xl hover:border-indigo-400 transition-all group bg-white"
-                  >
-                    <span className="text-sm font-semibold text-gray-800 group-hover:text-indigo-700 transition">
-                      {variantLabel || 'Choose Size'}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition" />
-                  </button>
+
+                  {/* Inline dropdown */}
+                  <div className="relative">
+                    <select
+                      value={`${cGroup}|${cDim}|${cThick}`}
+                      onChange={e => {
+                        const [g, d, t] = e.target.value.split('|');
+                        setCGroup(g); setCDim(d); setCThick(t);
+                      }}
+                      className="w-full appearance-none px-4 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-800 bg-white focus:outline-none focus:border-indigo-400 pr-10 cursor-pointer"
+                    >
+                      {product.variants.map((v, i) => {
+                        const g = v.sizeGroup || 'Standard';
+                        const vSale  = v.salePrice ? parseFloat(String(v.salePrice)) : null;
+                        const vPrice = parseFloat(String(v.price));
+                        const displayPrice = vSale ?? vPrice;
+                        const parts = [
+                          g !== 'Standard' ? g : '',
+                          v.size,
+                          v.thickness ? `${v.thickness} Inch` : '',
+                        ].filter(Boolean).join(' | ');
+                        return (
+                          <option key={v.id || i} value={`${g}|${v.size}|${v.thickness || ''}`}>
+                            {parts} — ₹{fmt(Math.round(displayPrice))}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  {/* Selected variant details: size group + thickness */}
+                  <div className="flex gap-2 flex-wrap">
+                    {cGroup && cGroup !== 'Standard' && (
+                      <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold px-3 py-1.5 rounded-full">
+                        {cGroup}
+                      </span>
+                    )}
+                    {cDim && (
+                      <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                        📐 {cDim} Inches
+                      </span>
+                    )}
+                    {cThick && (
+                      <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-semibold px-3 py-1.5 rounded-full">
+                        📏 Thickness: {cThick} Inch
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Custom size note */}
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-1">
+                    <p className="text-sm font-semibold text-gray-700">Need A Custom Size Mattress?</p>
+                    <p className="text-xs text-red-600 font-bold leading-snug">
+                      Note: All The Measurement Are In Inches (Length × Width)
+                      {cThick && <><br />THICKNESS = {cThick} INCH</>}
+                    </p>
+                    <p className="text-xs text-gray-500 leading-snug">
+                      Note: Flat 70% off (Diwali Dhamaka Sale) Will Be Applied In Cart Page
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -621,6 +690,12 @@ export default function ProductDetailPage() {
                   <Heart className={`w-5 h-5 ${wished ? 'fill-red-500' : ''}`} />
                 </button>
               </div>
+              <button
+                onClick={handleOrderNow}
+                className="w-full py-3.5 bg-red-500 text-white rounded-xl font-bold text-base hover:bg-orange-600 transition active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Zap className="w-4 h-4" /> Order Now
+              </button>
               <Link href="/contact">
                 <button className="w-full py-3 border-2 border-indigo-600 text-indigo-600 rounded-xl font-bold text-base hover:bg-indigo-50 transition active:scale-[0.99] flex items-center justify-center gap-2">
                   <Phone className="w-4 h-4" /> Get Quote

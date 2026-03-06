@@ -107,3 +107,26 @@ export const useWishlistStore = create<WishlistStore>()(
     { name: 'mattress-wishlist' }
   )
 );
+
+export interface BuyNowItem {
+  productId: string;
+  variantId: string;
+  productName: string;
+  productSlug: string;
+  imageUrl: string;
+  variantLabel: string;
+  price: number;
+  quantity: number;
+}
+
+interface BuyNowStore {
+  item: BuyNowItem | null;
+  set: (item: BuyNowItem) => void;
+  clear: () => void;
+}
+
+export const useBuyNowStore = create<BuyNowStore>()((set) => ({
+  item: null,
+  set: (item) => set({ item }),
+  clear: () => set({ item: null }),
+}));

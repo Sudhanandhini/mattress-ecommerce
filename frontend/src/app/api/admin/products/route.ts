@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // GET all products
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const products = await prisma.product.findMany({
       include: {
@@ -91,7 +91,24 @@ export async function POST(request: NextRequest) {
             .filter((f: any) => f.name)
             .map((f: any, i: number) => ({
               name: f.name,
+              image: f.image || null,
               sortOrder: i,
+            })),
+        } : undefined,
+
+        // Variants
+        variants: body.variants?.length > 0 ? {
+          create: body.variants
+            .filter((v: any) => v.price)
+            .map((v: any, i: number) => ({
+              sizeGroup: v.sizeGroup || null,
+              size:      v.size      || '',
+              thickness: v.thickness || null,
+              firmness:  v.firmness  || null,
+              price:     parseFloat(v.price),
+              salePrice: v.salePrice ? parseFloat(v.salePrice) : null,
+              sortOrder: i,
+              isActive:  true,
             })),
         } : undefined,
       },

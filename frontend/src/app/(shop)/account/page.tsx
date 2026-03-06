@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   User, ShoppingBag, Lock, LogOut, ChevronRight,
   Save, Eye, EyeOff, CheckCircle, Package, RefreshCw,
-  Mail, Phone, BadgeCheck, Calendar,
+  Mail, Phone, BadgeCheck, Calendar, MapPin, CreditCard, Banknote,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import toast from 'react-hot-toast';
@@ -28,7 +28,9 @@ function fmt(n: number) { return n.toLocaleString('en-IN'); }
 
 interface Order {
   id: string; orderNumber: string; status: string;
+  paymentMethod: string; paymentStatus: string;
   total: string; createdAt: string;
+  shippingAddress: { addressLine1: string; city: string; state: string; pincode: string } | null;
   items: { productName: string; quantity: number; product: { images: { url: string }[] } }[];
 }
 
@@ -75,7 +77,10 @@ function AccountContent() {
   };
 
   useEffect(() => {
-    if (tab === 'orders' && token && !ordersLoaded) fetchOrders(token);
+    if (tab === 'orders' && token) {
+      setOrdersLoaded(false);
+      fetchOrders(token);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, token]);
 
@@ -367,23 +372,34 @@ function AccountContent() {
                       <div className="divide-y divide-gray-50">
                         {orders.map(order => (
                           <div key={order.id} className="p-5 hover:bg-gray-50/60 transition">
+                            {/* Top row: order # + status + total */}
                             <div className="flex items-start justify-between gap-3 flex-wrap">
                               <div>
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <span className="font-mono font-bold text-gray-800 text-sm">{order.orderNumber}</span>
                                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-600'}`}>
                                     {order.status}
+                                  </span>
+                                  {/* Payment status */}
+                                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                    order.paymentStatus === 'PAID'   ? 'bg-green-100 text-green-700' :
+                                    order.paymentStatus === 'FAILED' ? 'bg-red-100 text-red-600'     :
+                                    'bg-yellow-50 text-yellow-700'
+                                  }`}>
+                                    {order.paymentStatus}
                                   </span>
                                 </div>
                                 <p className="text-xs text-gray-400">
                                   {new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                 </p>
                               </div>
-                              <div className="text-right">
+                              <div className="text-right shrink-0">
                                 <p className="font-bold text-gray-900 text-base">₹{fmt(Math.round(parseFloat(order.total)))}</p>
                                 <p className="text-xs text-gray-400">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</p>
                               </div>
                             </div>
+
+                            {/* Items chips */}
                             <div className="flex gap-2 mt-3 flex-wrap">
                               {order.items.slice(0, 3).map((item, i) => (
                                 <div key={i} className="flex items-center gap-2 bg-indigo-50/60 border border-indigo-100/60 rounded-lg px-3 py-1.5">
@@ -396,6 +412,23 @@ function AccountContent() {
                               ))}
                               {order.items.length > 3 && (
                                 <span className="text-xs text-gray-400 flex items-center">+{order.items.length - 3} more</span>
+                              )}
+                            </div>
+
+                            {/* Footer: payment method + delivery city */}
+                            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-50 flex-wrap">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                {order.paymentMethod === 'RAZORPAY'
+                                  ? <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                                  : <Banknote className="w-3.5 h-3.5 text-green-500" />
+                                }
+                                <span className="font-medium">{order.paymentMethod === 'RAZORPAY' ? 'Paid Online' : 'Cash on Delivery'}</span>
+                              </div>
+                              {order.shippingAddress && (
+                                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                  <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                                  <span>{order.shippingAddress.city}, {order.shippingAddress.state}</span>
+                                </div>
                               )}
                             </div>
                           </div>
