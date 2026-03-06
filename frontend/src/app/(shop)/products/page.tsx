@@ -1,13 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Search, SlidersHorizontal, X, ChevronRight } from 'lucide-react';
+import { Search, SlidersHorizontal, X, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { ProductCard } from '@/components/product/ProductCard';
 import { Button } from '@/components/ui/Button';
 import { productApi, categoryApi } from '@/lib/api/client';
 import { AnimatedSection } from '@/components/ui/AnimatedSection';
+
+interface Variant {
+  id: string;
+  sizeGroup?: string;
+  size?: string;
+  thickness?: string;
+  firmness?: string;
+  color?: string;
+  price: string;
+  salePrice?: string;
+  isActive?: boolean;
+}
 
 interface Product {
   id: string;
@@ -22,6 +34,8 @@ interface Product {
   shortDescription?: string;
   avgRating?: number;
   reviewCount?: number;
+  variants?: Variant[];
+  images?: { url: string; isPrimary: boolean }[];
 }
 
 interface Category {
@@ -31,15 +45,39 @@ interface Category {
 }
 
 const PRICE_RANGES = [
-  { label: 'Under \u20B920,000', min: 0, max: 20000 },
-  { label: '\u20B920,000 - \u20B940,000', min: 20000, max: 40000 },
-  { label: '\u20B940,000 - \u20B960,000', min: 40000, max: 60000 },
-  { label: '\u20B960,000+', min: 60000, max: Infinity },
+  { label: 'Under ₹20,000', min: 0, max: 20000 },
+  { label: '₹20,000 - ₹40,000', min: 20000, max: 40000 },
+  { label: '₹40,000 - ₹60,000', min: 40000, max: 60000 },
+  { label: '₹60,000+', min: 60000, max: Infinity },
 ];
 
-const sidebarFeatured = [
-  { name: 'Geometry Knots', category: 'Foam Bed', slug: 'geometry-knots' },
-];
+const SIZE_GROUPS = ['Single', 'Double', 'Queen', 'King', 'Super King'];
+
+function FilterSection({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-6 py-4 text-left"
+      >
+        <h3 className="text-base font-bold text-navy-700 flex items-center gap-2">
+          <span className="text-accent-500">&#9679;</span> {title}
+        </h3>
+        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+      </button>
+      {open && <div className="px-6 pb-5">{children}</div>}
+    </div>
+  );
+}
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -47,6 +85,10 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedPriceRange, setSelectedPriceRange] = useState<{ min: number; max: number } | null>(null);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedThickness, setSelectedThickness] = useState<string[]>([]);
+  const [selectedDimensions, setSelectedDimensions] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('popularity');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -54,16 +96,7 @@ export default function ProductsPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const response = await categoryApi.getAll();
-        const categoryList = response.data || response;
-        setCategories(categoryList);
-      } catch (err) {
-        console.error('Error fetching categories:', err);
-      }
-    };
-    fetchCategories();
+    categoryApi.getAll().then((res) => setCategories(res.data || res)).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -79,14 +112,15 @@ export default function ProductsPage() {
           const lowestVariant = sorted[0];
           const basePrice = parseFloat(lowestVariant?.price) || parseFloat(p.basePrice) || 0;
           const discountPrice = parseFloat(lowestVariant?.salePrice) || parseFloat(p.discountPrice) || basePrice;
-          const discountPercent = basePrice > discountPrice ? Math.round(((basePrice - discountPrice) / basePrice) * 100) : (p.discountPercent || 0);
+          const discountPercent = basePrice > discountPrice
+            ? Math.round(((basePrice - discountPrice) / basePrice) * 100)
+            : (p.discountPercent || 0);
           const category = p.categories?.[0]?.category?.name || p.category || 'Mattress';
           return { ...p, category, basePrice, discountPrice, discountPercent };
         });
         setProducts(mapped);
       } catch (err) {
         setError('Failed to load products. Please try again later.');
-        console.error('Error fetching products:', err);
       } finally {
         setLoading(false);
       }
@@ -94,8 +128,26 @@ export default function ProductsPage() {
     fetchProducts();
   }, []);
 
+  // Extract unique filter values from variants
+  const availableColors = useMemo(() => {
+    const all = products.flatMap((p) => (p.variants || []).map((v) => v.color).filter(Boolean)) as string[];
+    return [...new Set(all)].sort();
+  }, [products]);
+
+  const availableThickness = useMemo(() => {
+    const all = products.flatMap((p) => (p.variants || []).map((v) => v.thickness).filter(Boolean)) as string[];
+    return [...new Set(all)].sort();
+  }, [products]);
+
+  const availableDimensions = useMemo(() => {
+    const all = products.flatMap((p) => (p.variants || []).map((v) => v.size).filter(Boolean)) as string[];
+    return [...new Set(all)].sort();
+  }, [products]);
+
+  // Filtering
   useEffect(() => {
     let result = [...products];
+
     if (selectedCategory !== 'All') {
       result = result.filter((p) => p.category === selectedCategory);
     }
@@ -105,103 +157,191 @@ export default function ProductsPage() {
       );
     }
     if (searchTerm) {
+      result = result.filter((p) => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+    if (selectedSizes.length > 0) {
       result = result.filter((p) =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (p.variants || []).some((v) => v.sizeGroup && selectedSizes.includes(v.sizeGroup))
       );
     }
-    if (sortBy === 'price-low') {
-      result.sort((a, b) => a.discountPrice - b.discountPrice);
-    } else if (sortBy === 'price-high') {
-      result.sort((a, b) => b.discountPrice - a.discountPrice);
-    } else if (sortBy === 'rating') {
-      result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    if (selectedColors.length > 0) {
+      result = result.filter((p) =>
+        (p.variants || []).some((v) => v.color && selectedColors.includes(v.color))
+      );
     }
-    setFilteredProducts(result);
-  }, [selectedCategory, selectedPriceRange, sortBy, searchTerm, products]);
+    if (selectedThickness.length > 0) {
+      result = result.filter((p) =>
+        (p.variants || []).some((v) => v.thickness && selectedThickness.includes(v.thickness))
+      );
+    }
+    if (selectedDimensions.length > 0) {
+      result = result.filter((p) =>
+        (p.variants || []).some((v) => v.size && selectedDimensions.includes(v.size))
+      );
+    }
 
-  const categoryCount = (name: string) => {
-    if (name === 'All') return products.length;
-    return products.filter((p) => p.category === name).length;
-  };
+    if (sortBy === 'price-low') result.sort((a, b) => a.discountPrice - b.discountPrice);
+    else if (sortBy === 'price-high') result.sort((a, b) => b.discountPrice - a.discountPrice);
+    else if (sortBy === 'rating') result.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
+
+    setFilteredProducts(result);
+  }, [selectedCategory, selectedPriceRange, sortBy, searchTerm, selectedSizes, selectedColors, selectedThickness, selectedDimensions, products]);
 
   const clearFilters = () => {
     setSelectedCategory('All');
     setSelectedPriceRange(null);
     setSearchTerm('');
     setSortBy('popularity');
+    setSelectedSizes([]);
+    setSelectedColors([]);
+    setSelectedThickness([]);
+    setSelectedDimensions([]);
   };
 
+  const toggleMulti = (value: string, list: string[], setList: (v: string[]) => void) => {
+    setList(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+  };
+
+  const activeFilterCount =
+    (selectedCategory !== 'All' ? 1 : 0) +
+    (selectedPriceRange ? 1 : 0) +
+    selectedSizes.length +
+    selectedColors.length +
+    selectedThickness.length +
+    selectedDimensions.length;
+
   const FilterSidebar = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Clear filters */}
+      {activeFilterCount > 0 && (
+        <button
+          onClick={clearFilters}
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-accent-50 text-accent-600 rounded-xl text-sm font-semibold border border-accent-200"
+        >
+          <span>Clear All Filters</span>
+          <span className="bg-accent-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+            {activeFilterCount}
+          </span>
+        </button>
+      )}
+
       {/* Categories */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-navy-700 mb-4 flex items-center gap-2">
-          <span className="text-accent-500">&#9679;</span> Categories
-        </h3>
+      <FilterSection title="Categories">
         <div className="space-y-1">
           <button
             onClick={() => setSelectedCategory('All')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              selectedCategory === 'All'
-                ? 'bg-accent-500 text-white'
-                : 'text-gray-700 hover:bg-gray-50'
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              selectedCategory === 'All' ? 'bg-accent-500 text-white' : 'text-gray-700 hover:bg-gray-50'
             }`}
           >
             <span>All</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              selectedCategory === 'All' ? 'bg-white/20' : 'bg-gray-100'
-            }`}>
-              {categoryCount('All')}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${selectedCategory === 'All' ? 'bg-white/20' : 'bg-gray-100'}`}>
+              {products.length}
             </span>
           </button>
           {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.name)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                selectedCategory === cat.name
-                  ? 'bg-accent-500 text-white'
-                  : 'text-gray-700 hover:bg-gray-50'
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                selectedCategory === cat.name ? 'bg-accent-500 text-white' : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
               <span>{cat.name}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                selectedCategory === cat.name ? 'bg-white/20' : 'bg-gray-100'
-              }`}>
-                {categoryCount(cat.name)}
+              <span className={`text-xs px-2 py-0.5 rounded-full ${selectedCategory === cat.name ? 'bg-white/20' : 'bg-gray-100'}`}>
+                {products.filter((p) => p.category === cat.name).length}
               </span>
             </button>
           ))}
         </div>
-      </div>
+      </FilterSection>
 
-      {/* Featured Products Sidebar */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-navy-700 mb-4 flex items-center gap-2">
-          <span className="text-accent-500">&#9679;</span> Featured Products
-        </h3>
-        {sidebarFeatured.map((item) => (
-          <Link key={item.slug} href={`/products/${item.slug}`} className="flex items-center gap-3 group">
-            <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center text-2xl flex-shrink-0">
-              &#128716;
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-navy-700 group-hover:text-accent-500 transition-colors">{item.name}</p>
-              <p className="text-xs text-gray-500">{item.category}</p>
-            </div>
-          </Link>
-        ))}
-      </div>
+      {/* Size */}
+      <FilterSection title="Size">
+        <div className="grid grid-cols-2 gap-2">
+          {SIZE_GROUPS.map((size) => (
+            <button
+              key={size}
+              onClick={() => toggleMulti(size, selectedSizes, setSelectedSizes)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium border transition-all text-center ${
+                selectedSizes.includes(size)
+                  ? 'bg-accent-500 text-white border-accent-500'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-accent-400'
+              }`}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* Dimensions (Width x Length) */}
+      {availableDimensions.length > 0 && (
+        <FilterSection title="Dimensions (W×L)" defaultOpen={false}>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {availableDimensions.map((dim) => (
+              <label key={dim} className="flex items-center gap-2.5 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={selectedDimensions.includes(dim)}
+                  onChange={() => toggleMulti(dim, selectedDimensions, setSelectedDimensions)}
+                  className="w-4 h-4 rounded border-gray-300 text-accent-500 focus:ring-accent-500"
+                />
+                <span className="text-sm text-gray-700 group-hover:text-navy-700">{dim}</span>
+              </label>
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {/* Thickness / Height */}
+      {availableThickness.length > 0 && (
+        <FilterSection title="Thickness / Height" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-2">
+            {availableThickness.map((t) => (
+              <button
+                key={t}
+                onClick={() => toggleMulti(t, selectedThickness, setSelectedThickness)}
+                className={`px-3 py-2 rounded-xl text-xs font-medium border transition-all text-center ${
+                  selectedThickness.includes(t)
+                    ? 'bg-navy-700 text-white border-navy-700'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-navy-400'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
+
+      {/* Color */}
+      {availableColors.length > 0 && (
+        <FilterSection title="Color" defaultOpen={false}>
+          <div className="flex flex-wrap gap-2">
+            {availableColors.map((color) => (
+              <button
+                key={color}
+                onClick={() => toggleMulti(color, selectedColors, setSelectedColors)}
+                className={`px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
+                  selectedColors.includes(color)
+                    ? 'bg-accent-500 text-white border-accent-500'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-accent-400'
+                }`}
+              >
+                {color}
+              </button>
+            ))}
+          </div>
+        </FilterSection>
+      )}
 
       {/* Price Range */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-navy-700 mb-4 flex items-center gap-2">
-          <span className="text-accent-500">&#9679;</span> Price Range
-        </h3>
+      <FilterSection title="Price Range">
         <div className="space-y-1">
           <button
             onClick={() => setSelectedPriceRange(null)}
-            className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all ${
               selectedPriceRange === null ? 'bg-accent-50 text-accent-600' : 'text-gray-700 hover:bg-gray-50'
             }`}
           >
@@ -211,7 +351,7 @@ export default function ProductsPage() {
             <button
               key={range.label}
               onClick={() => setSelectedPriceRange({ min: range.min, max: range.max })}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 selectedPriceRange?.min === range.min && selectedPriceRange?.max === range.max
                   ? 'bg-accent-50 text-accent-600'
                   : 'text-gray-700 hover:bg-gray-50'
@@ -221,7 +361,7 @@ export default function ProductsPage() {
             </button>
           ))}
         </div>
-      </div>
+      </FilterSection>
     </div>
   );
 
@@ -235,11 +375,7 @@ export default function ProductsPage() {
           }} />
         </div>
         <div className="container mx-auto px-4 relative z-10 py-14">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
               <Link href="/" className="hover:text-white transition-colors">Home</Link>
               <ChevronRight className="w-4 h-4" />
@@ -258,11 +394,10 @@ export default function ProductsPage() {
           {/* Top bar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <p className="text-sm text-gray-600">
-              Showing <span className="font-semibold text-navy-700">1-{filteredProducts.length}</span> of{' '}
-              <span className="font-semibold text-navy-700">{filteredProducts.length}</span> results
+              Showing <span className="font-semibold text-navy-700">{filteredProducts.length}</span> of{' '}
+              <span className="font-semibold text-navy-700">{products.length}</span> results
             </p>
             <div className="flex items-center gap-3">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -273,7 +408,6 @@ export default function ProductsPage() {
                   className="pl-9 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent w-48 md:w-64 bg-white"
                 />
               </div>
-              {/* Sort */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -284,15 +418,55 @@ export default function ProductsPage() {
                 <option value="price-high">Price: High to Low</option>
                 <option value="rating">Highest Rated</option>
               </select>
-              {/* Mobile filter button */}
               <button
                 onClick={() => setShowMobileFilters(true)}
-                className="lg:hidden p-2.5 border border-gray-300 rounded-xl bg-white hover:bg-gray-50"
+                className="lg:hidden relative p-2.5 border border-gray-300 rounded-xl bg-white hover:bg-gray-50"
               >
                 <SlidersHorizontal className="w-4 h-4 text-gray-600" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-accent-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
+
+          {/* Active filter chips */}
+          {activeFilterCount > 0 && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {selectedSizes.map((s) => (
+                <span key={s} className="flex items-center gap-1 bg-accent-100 text-accent-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                  Size: {s}
+                  <button onClick={() => toggleMulti(s, selectedSizes, setSelectedSizes)}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              {selectedColors.map((c) => (
+                <span key={c} className="flex items-center gap-1 bg-accent-100 text-accent-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                  Color: {c}
+                  <button onClick={() => toggleMulti(c, selectedColors, setSelectedColors)}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              {selectedThickness.map((t) => (
+                <span key={t} className="flex items-center gap-1 bg-accent-100 text-accent-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                  Thickness: {t}
+                  <button onClick={() => toggleMulti(t, selectedThickness, setSelectedThickness)}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              {selectedDimensions.map((d) => (
+                <span key={d} className="flex items-center gap-1 bg-accent-100 text-accent-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                  Size: {d}
+                  <button onClick={() => toggleMulti(d, selectedDimensions, setSelectedDimensions)}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              {selectedPriceRange && (
+                <span className="flex items-center gap-1 bg-accent-100 text-accent-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                  {PRICE_RANGES.find((r) => r.min === selectedPriceRange.min)?.label}
+                  <button onClick={() => setSelectedPriceRange(null)}><X className="w-3 h-3" /></button>
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Desktop Sidebar */}
@@ -345,13 +519,10 @@ export default function ProductsPage() {
                 <AnimatedSection className="text-center py-20">
                   <div className="text-6xl mb-4">&#128533;</div>
                   <p className="text-gray-600 mb-4 text-lg">No products found matching your criteria</p>
-                  <Button onClick={clearFilters}>
-                    Clear Filters
-                  </Button>
+                  <Button onClick={clearFilters}>Clear Filters</Button>
                 </AnimatedSection>
               )}
 
-              {/* Pagination placeholder */}
               {filteredProducts.length > 0 && (
                 <div className="flex items-center justify-center gap-2 mt-12">
                   <button className="w-10 h-10 rounded-full bg-accent-500 text-white font-semibold text-sm">1</button>

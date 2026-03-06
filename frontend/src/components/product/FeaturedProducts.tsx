@@ -1,71 +1,62 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { ProductCard } from './ProductCard';
 import { StaggerContainer, StaggerItem } from '../ui/AnimatedSection';
-
-const mockProducts = [
-  {
-    id: '1',
-    name: 'Bliss Memory Foam Mattress',
-    slug: 'bliss-memory-foam-mattress',
-    shortDescription: 'Premium memory foam for ultimate comfort and support.',
-    basePrice: 35999,
-    discountPercent: 33,
-    discountPrice: 24119,
-    images: [{ url: '/images/products/memory-foam-1.jpg', isPrimary: true }],
-    avgRating: 4.5,
-    reviewCount: 128,
-    isFeatured: true,
-    category: 'Memory Foam',
-  },
-  {
-    id: '2',
-    name: 'Bonnell Plus Spring Mattress',
-    slug: 'bonnell-plus-spring-mattress',
-    shortDescription: 'Traditional spring support with modern comfort layers.',
-    basePrice: 41999,
-    discountPercent: 33,
-    discountPrice: 28139,
-    images: [{ url: '/images/products/spring-1.jpg', isPrimary: true }],
-    avgRating: 4.3,
-    reviewCount: 95,
-    isFeatured: true,
-    category: 'Spring',
-  },
-  {
-    id: '3',
-    name: 'Orthopedic Support Mattress',
-    slug: 'orthopedic-support-mattress',
-    shortDescription: 'Designed for optimal back support and posture care.',
-    basePrice: 38999,
-    discountPercent: 30,
-    discountPrice: 27299,
-    images: [{ url: '/images/products/ortho-1.jpg', isPrimary: true }],
-    avgRating: 4.7,
-    reviewCount: 156,
-    isFeatured: true,
-    category: 'Orthopedic',
-  },
-  {
-    id: '4',
-    name: 'Hybrid Comfort Mattress',
-    slug: 'hybrid-comfort-mattress',
-    shortDescription: 'Best of foam and spring technology combined.',
-    basePrice: 45999,
-    discountPercent: 35,
-    discountPrice: 29899,
-    images: [{ url: '/images/products/hybrid-1.jpg', isPrimary: true }],
-    avgRating: 4.6,
-    reviewCount: 103,
-    isFeatured: true,
-    category: 'Hybrid',
-  },
-];
+import { productApi } from '@/lib/api/client';
 
 export function FeaturedProducts() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await productApi.getAll();
+        const productList = response.data?.products || response.data || response;
+        const mapped = productList.slice(0, 4).map((p: any) => {
+          const variants = (p.variants || []).filter((v: any) => v.isActive !== false);
+          const sorted = [...variants].sort((a: any, b: any) => parseFloat(a.price) - parseFloat(b.price));
+          const lowestVariant = sorted[0];
+          const basePrice = parseFloat(lowestVariant?.price) || parseFloat(p.basePrice) || 0;
+          const discountPrice = parseFloat(lowestVariant?.salePrice) || parseFloat(p.discountPrice) || basePrice;
+          const discountPercent = basePrice > discountPrice
+            ? Math.round(((basePrice - discountPrice) / basePrice) * 100)
+            : (p.discountPercent || 0);
+          const category = p.categories?.[0]?.category?.name || p.category || 'Mattress';
+          return { ...p, category, basePrice, discountPrice, discountPercent };
+        });
+        setProducts(mapped);
+      } catch (err) {
+        console.error('Error fetching featured products:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100 animate-pulse">
+            <div className="aspect-[4/3] bg-gray-200" />
+            <div className="p-5 space-y-3">
+              <div className="h-3 bg-gray-200 rounded w-1/3" />
+              <div className="h-5 bg-gray-200 rounded w-3/4" />
+              <div className="h-3 bg-gray-200 rounded w-full" />
+              <div className="h-6 bg-gray-200 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      {mockProducts.map((product, index) => (
+      {products.map((product, index) => (
         <ProductCard key={product.id} product={product} index={index} />
       ))}
     </div>

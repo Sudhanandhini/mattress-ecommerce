@@ -21,6 +21,11 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
     firstName: '', lastName: '', email: '', phone: '', password: '',
   });
 
+  const switchMode = (m: 'login' | 'register') => {
+    setMode(m);
+    setForm({ firstName: '', lastName: '', email: '', phone: '', password: '' });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   };
@@ -93,7 +98,7 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
           {(['login', 'register'] as const).map(m => (
             <button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
                 mode === m ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'
               }`}
@@ -104,28 +109,36 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-3">
-          <AnimatePresence mode="wait">
+        {/* hidden inputs to prevent browser autofill on real fields */}
+        <div style={{ display: 'none' }}>
+          <input type="email" name="fake-email" autoComplete="username" />
+          <input type="password" name="fake-password" autoComplete="current-password" />
+        </div>
+
+        <form onSubmit={handleSubmit} autoComplete="off" className="px-6 py-5 space-y-3">
+          <AnimatePresence>
             {mode === 'register' && (
               <motion.div
                 key="register-extra"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="space-y-3 overflow-hidden"
+                transition={{ duration: 0.2 }}
+                style={{ overflow: 'hidden' }}
+                className="space-y-3"
               >
                 <div className="grid grid-cols-2 gap-3">
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       name="firstName" value={form.firstName} onChange={handleChange}
-                      placeholder="First name"
+                      placeholder="First name" autoComplete="off"
                       className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400 transition"
                     />
                   </div>
                   <input
                     name="lastName" value={form.lastName} onChange={handleChange}
-                    placeholder="Last name"
+                    placeholder="Last name" autoComplete="off"
                     className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400 transition"
                   />
                 </div>
@@ -133,7 +146,7 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     name="phone" value={form.phone} onChange={handleChange}
-                    placeholder="Phone number" type="tel"
+                    placeholder="Phone number" type="tel" autoComplete="off"
                     className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400 transition"
                   />
                 </div>
@@ -146,7 +159,7 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               name="email" value={form.email} onChange={handleChange}
-              placeholder="Email address" type="email"
+              placeholder="Email address" type="email" autoComplete="off"
               className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400 transition"
               required
             />
@@ -158,6 +171,7 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
             <input
               name="password" value={form.password} onChange={handleChange}
               placeholder="Password" type={showPass ? 'text' : 'password'}
+              autoComplete="new-password"
               className="w-full pl-9 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400 transition"
               required
             />

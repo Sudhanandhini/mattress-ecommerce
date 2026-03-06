@@ -6,25 +6,16 @@ export async function GET(request: NextRequest) {
   try {
     const products = await prisma.product.findMany({
       include: {
-        categories: {
-          include: { category: true },
-        },
-        images: {
-          orderBy: { sortOrder: 'asc' },
-          take: 1,
-        },
-        variants: {
-          orderBy: { sortOrder: 'asc' },
-        },
+        categories: { include: { category: true } },
+        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        variants: { orderBy: { sortOrder: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Transform for the admin table
     const result = products.map((p) => {
       const prices = p.variants.map((v) => Number(v.price));
       const salePrices = p.variants.filter((v) => v.salePrice).map((v) => Number(v.salePrice!));
-
       return {
         id: p.id,
         wcId: p.wcId,
@@ -46,10 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error fetching products:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch products' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
 
@@ -75,15 +63,43 @@ export async function POST(request: NextRequest) {
         warranty: body.warranty || null,
         status: body.status || 'ACTIVE',
         isFeatured: body.isFeatured || false,
+
+        // Images
+        images: body.images?.length > 0 ? {
+          create: body.images.map((img: any, i: number) => ({
+            url: img.url,
+            altText: img.altText || null,
+            isPrimary: img.isPrimary || i === 0,
+            sortOrder: i,
+          })),
+        } : undefined,
+
+        // Specifications
+        specifications: body.specifications?.length > 0 ? {
+          create: body.specifications
+            .filter((s: any) => s.label && s.value)
+            .map((s: any, i: number) => ({
+              label: s.label,
+              value: s.value,
+              sortOrder: i,
+            })),
+        } : undefined,
+
+        // Freebies
+        freebies: body.freebies?.length > 0 ? {
+          create: body.freebies
+            .filter((f: any) => f.name)
+            .map((f: any, i: number) => ({
+              name: f.name,
+              sortOrder: i,
+            })),
+        } : undefined,
       },
     });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
     console.error('Error creating product:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to create product' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || 'Failed to create product' }, { status: 500 });
   }
 }

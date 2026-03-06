@@ -1,68 +1,57 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { ReactNode } from 'react';
+import { motion } from 'framer-motion';
 
 interface AnimatedSectionProps {
   children: ReactNode;
-  className?: string;
-  delay?: number;
   direction?: 'up' | 'down' | 'left' | 'right' | 'none';
-  duration?: number;
+  delay?: number;
+  className?: string;
 }
 
-const directionOffset = {
-  up: { y: 40, x: 0 },
-  down: { y: -40, x: 0 },
-  left: { y: 0, x: 40 },
-  right: { y: 0, x: -40 },
-  none: { y: 0, x: 0 },
+export function AnimatedSection({ children, direction = 'up', delay = 0, className }: AnimatedSectionProps) {
+  const initial: Record<string, unknown> = { opacity: 0 };
+  if (direction === 'up')    initial.y =  30;
+  if (direction === 'down')  initial.y = -30;
+  if (direction === 'left')  initial.x =  30;
+  if (direction === 'right') initial.x = -30;
+
+  return (
+    <motion.div
+      initial={initial}
+      whileInView={{ opacity: 1, x: 0, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+const staggerContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1 } },
 };
 
-export function AnimatedSection({
-  children,
-  className = '',
-  delay = 0,
-  direction = 'up',
-  duration = 0.6,
-}: AnimatedSectionProps) {
-  const offset = directionOffset[direction];
+const staggerItem = {
+  hidden: { opacity: 0, y: 20 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: offset.x, y: offset.y }}
-      whileInView={{ opacity: 1, x: 0, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration, delay, ease: 'easeOut' }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-export function StaggerContainer({
-  children,
-  className = '',
-  staggerDelay = 0.1,
-}: {
+interface StaggerProps {
   children: ReactNode;
   className?: string;
-  staggerDelay?: number;
-}) {
+}
+
+export function StaggerContainer({ children, className }: StaggerProps) {
   return (
     <motion.div
+      variants={staggerContainer}
       initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: '-50px' }}
-      variants={{
-        hidden: {},
-        visible: {
-          transition: {
-            staggerChildren: staggerDelay,
-          },
-        },
-      }}
+      whileInView="show"
+      viewport={{ once: true, margin: '-80px' }}
       className={className}
     >
       {children}
@@ -70,25 +59,9 @@ export function StaggerContainer({
   );
 }
 
-export function StaggerItem({
-  children,
-  className = '',
-  direction = 'up',
-}: {
-  children: ReactNode;
-  className?: string;
-  direction?: 'up' | 'down' | 'left' | 'right';
-}) {
-  const offset = directionOffset[direction];
-
+export function StaggerItem({ children, className }: StaggerProps) {
   return (
-    <motion.div
-      variants={{
-        hidden: { opacity: 0, x: offset.x, y: offset.y },
-        visible: { opacity: 1, x: 0, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
-      }}
-      className={className}
-    >
+    <motion.div variants={staggerItem} className={className}>
       {children}
     </motion.div>
   );
